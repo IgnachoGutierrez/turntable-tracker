@@ -45,11 +45,11 @@ def mark_listened(data):
         print(f"{idx}. {album['name']} by {album['artist']} ({album['duration']} min)")
     
     try:
-        choice = int(input("Select an album to mark as listened (1 to {len(data['albums'])}): ")) - 1
         if 0 <= choice < len(data["albums"]):
             album = data["albums"][choice]
             data["listened"].append(album)
             save_data(data)
+        choice = int(input(f"Select an album to mark as listened (1 to {len(albums)}): ")) - 1
             print(f"Album '{album['name']}' by {album['artist']} marked as listened.")
         else:
             print("Invalid selection.")
