@@ -26,6 +26,9 @@ def add_album(data):
     except ValueError:
         print("Invalid duration. Please enter a number.")
         return
+    if duration <= 0:
+        print("Invalid duration. Please enter a positive number.")
+        return
     album = {"name": name, "artist": artist, "duration": duration}
     data["albums"].append(album)
     save_data(data)
