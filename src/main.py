@@ -3,6 +3,8 @@ import sys
 
 import db
 from import_json import JSON_FILE
+import json
+import anthropic
 
 THRESHOLD_HOURS = 300
 WARNING_THRESHOLD = 280
@@ -62,6 +64,131 @@ def replace_stylus(conn):
         db.replace_stylus(conn)
         print("New stylus installed. Playtime tracker reset.")
 
+
+def resolve_vinyl_names_with_claude(truncated_names: list[str], catalog: list[dict]) -> dict:
+    """Use Claude to match truncated vinyl names against the catalog.
+
+    Returns a dict mapping each input name to the matched catalog album dict,
+    or None if no confident match was found.
+    """
+    catalog_text = "\n".join(
+        f'- "{a["name"]}" by {a["artist"]}' for a in catalog
+    )
+    names_text = "\n".join(f"{i+1}. {name}" for i, name in enumerate(truncated_names))
+
+    prompt = f"""You are helping match truncated or informal vinyl record names to their correct
+    entries in a music catalog.
+
+    CATALOG (exact names and artists):
+    {catalog_text}
+
+    TRUNCATED NAMES TO MATCH:
+    {names_text}
+
+    For each truncated name, find the best matching album in the catalog above.
+    Return a JSON object with a "matches" array. Each element must have:
+    - "input": the original truncated name exactly as given
+    - "match": the exact album name from the catalog, or null if no confident match exists
+
+    Only match against albums that are in the catalog. Do not invent entries."""
+
+    client = anthropic.Anthropic()
+    response = client.messages.create(
+        model="claude-opus-5",
+        max_tokens=1024,
+        thinking={"type": "adaptive"},
+        output_config={"format": {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "matches": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "input": {"type": "string"},
+                                "match": {"type": ["string", "null"]},
+                            },
+                            "required": ["input", "match"],
+                            "additionalProperties": False,
+                        },
+                    }
+                },
+                "required": ["matches"],
+                "additionalProperties": False,
+            },
+        }},
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    text_block = next((b for b in response.content if b.type == "text"), None)
+    if not text_block:
+        return {}
+
+    catalog_by_name = {a["name"]: a for a in catalog}
+    result = json.loads(text_block.text)
+    return {
+        item["input"]: catalog_by_name[item["match"]]
+        for item in result["matches"]
+        if item["match"] and item["match"] in catalog_by_name
+    }
+
+def bulk_import_listened(conn):
+    """Bulk import listened albums from a text file."""
+    filename = input("Enter the text file name (e.g., bulk_vinyl.txt): ")
+    
+    if not os.path.exists(filename):
+        print(f"File '{filename}' not found.")
+        return
+
+    with open(filename, 'r') as f:
+        # Read lines, strip whitespace, and ignore empty lines
+        lines = [line.strip() for line in f.readlines() if line.strip()]
+
+    # Create a lookup dictionary for case-insensitive matching
+    albums = db.list_albums(conn)
+    library_lookup = {album["name"].lower(): album for album in albums}
+
+    matched = []
+    not_found = []
+
+    for name in lines:
+        lower_name = name.lower()
+        if lower_name in library_lookup:
+            matched.append(library_lookup[lower_name])
+        else:
+            not_found.append(name)
+
+    # Try to resolve unmatched names using Claude
+    if not_found:
+        print(f"\n🤖 {len(not_found)} name(s) not found by exact match — asking Claude...")
+        try:
+            resolved = resolve_vinyl_names_with_claude(not_found, albums)
+        except anthropic.APIError as e:
+            print(f"  Could not reach Claude ({e}); skipping fuzzy matching.")
+            resolved = {}
+        still_missing = []
+        for name in not_found:
+            album = resolved.get(name)
+            if album:
+                matched.append(album)
+                print(f"  ✓ \"{name}\" → \"{album['name']}\" by {album['artist']}")
+            else:
+                still_missing.append(name)
+        not_found = still_missing
+
+    if matched:
+        db.mark_listened_many(conn, [album["album_id"] for album in matched])
+        print(f"\n✅ Successfully marked {len(matched)} albums as listened.")
+
+    if not_found:
+        print("\n⚠️ The following albums were skipped (not found in library):")
+        for missing in not_found:
+            print(f"  - {missing}")
+        print("Please add them to the library first (Option 1) before tracking them.")
+
+
 def main():
     """Main CLI menu."""
     if os.path.exists(JSON_FILE):
@@ -74,7 +201,8 @@ def main():
         print("2. Mark Album as Listened")
         print("3. Show Total Playtime")
         print("4. Replace Stylus")
-        print("5. Exit")
+        print("5. Bulk Import Listened Albums")
+        print("6. Exit")
         choice = input("Select an option: ")
 
         if choice == "1":
@@ -86,6 +214,8 @@ def main():
         elif choice == "4":
             replace_stylus(conn)
         elif choice == "5":
+            bulk_import_listened(conn)
+        elif choice == "6":
             print("Goodbye!")
             break
         else:

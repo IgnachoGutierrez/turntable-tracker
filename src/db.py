@@ -87,6 +87,15 @@ def mark_listened(conn, album_id):
             (album_id, stylus_id),
         )
 
+def mark_listened_many(conn, album_ids):
+    """Record a listen of each album on the current stylus, all in one transaction."""
+    stylus_id = current_stylus_id(conn)
+    with conn:
+        conn.executemany(
+            "INSERT INTO listened_albums (album_id, stylus_id) VALUES (?, ?)",
+            [(album_id, stylus_id) for album_id in album_ids],
+        )
+
 def replace_stylus(conn):
     """Install a new stylus; playtime counts from zero again."""
     with conn:
