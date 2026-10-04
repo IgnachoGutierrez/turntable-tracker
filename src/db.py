@@ -70,6 +70,25 @@ def list_albums(conn):
         ORDER BY ar.name, al.name
     """).fetchall()
 
+def list_recent_listens(conn, limit=20):
+    """Return the most recent listens, newest first, with their artist name and listened on date"""
+    return conn.execute("""
+        SELECT
+            al.name,
+            ar.name AS artist,
+            la.created_at
+        FROM
+            listened_albums la
+        JOIN
+            albums al
+                USING (album_id)
+        JOIN artists ar
+                USING (artist_id)
+        ORDER BY
+            la.created_at DESC
+        LIMIT ?;
+    """, (limit,)).fetchall()
+
 def current_stylus_id(conn):
     """Return the most recently installed stylus, creating the first one on a fresh database."""
     row = conn.execute("SELECT stylus_id FROM stylus ORDER BY stylus_id DESC LIMIT 1").fetchone()

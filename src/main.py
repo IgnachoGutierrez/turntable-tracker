@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime, timezone
 
 import db
 from import_json import JSON_FILE
@@ -188,6 +189,34 @@ def bulk_import_listened(conn):
             print(f"  - {missing}")
         print("Please add them to the library first (Option 1) before tracking them.")
 
+def time_ago(created_at):
+    """Format a UTC timestamp from the database as a relative time, e.g. '2 hours ago'."""
+    dt = datetime.fromisoformat(created_at).replace(tzinfo=timezone.utc)
+    seconds = (datetime.now(timezone.utc) - dt).total_seconds()
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)} min ago"
+    if seconds < 86400:
+        hours = int(seconds // 3600)
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    if seconds < 172800:
+        return "yesterday"
+    local = dt.astimezone()
+    return f"{local:%b} {local.day}"
+
+def show_recent_listened(conn):
+    """Display the 20 most recently listened albums."""
+    recent = db.list_recent_listens(conn)
+    if not recent:
+        print("\nNo albums listened to yet.")
+        return
+
+    CYAN, RESET = "\033[96m", "\033[0m"
+
+    print("\nLast 20 listened albums:")
+    for i, album in enumerate(recent, 1):
+        print(f"{i:>2}. {album['name']} by {CYAN}{album['artist']}{RESET} ({time_ago(album['created_at'])})")
 
 def main():
     """Main CLI menu."""
@@ -202,7 +231,8 @@ def main():
         print("3. Show Total Playtime")
         print("4. Replace Stylus")
         print("5. Bulk Import Listened Albums")
-        print("6. Exit")
+        print("6. Recent Listens")
+        print("7. Exit")
         choice = input("Select an option: ")
 
         if choice == "1":
@@ -216,6 +246,8 @@ def main():
         elif choice == "5":
             bulk_import_listened(conn)
         elif choice == "6":
+            show_recent_listened(conn)
+        elif choice == "7":
             print("Goodbye!")
             break
         else:
