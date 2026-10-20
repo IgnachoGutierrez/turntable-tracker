@@ -32,9 +32,11 @@ def mark_listened(conn):
         print("No albums available in the library. Add albums first.")
         return
 
+    CYAN, RESET = "\033[96m", "\033[0m"
+
     print("\nAvailable Albums:")
     for idx, album in enumerate(albums, 1):
-        print(f"{idx}. {album['name']} by {album['artist']} ({album['duration_seconds'] / 60:g} min)")
+        print(f"{idx}. {album['name']} by {CYAN}{album['artist']}{RESET} ({album['duration_seconds'] / 60:g} min)")
 
     try:
         choice = int(input(f"Select an album to mark as listened (1 to {len(albums)}): ")) - 1
