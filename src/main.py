@@ -220,6 +220,17 @@ def show_recent_listened(conn):
     for i, album in enumerate(recent, 1):
         print(f"{i:>2}. {album['name']} by {CYAN}{album['artist']}{RESET} ({time_ago(album['created_at'])})")
 
+def show_stale_albums(conn):
+    """Display the 10 least recently listened albums."""
+    stale = db.list_stale_albums(conn)
+
+    CYAN, RESET = "\033[96m", "\033[0m"
+
+    print("\n10 albums you haven't played in a while:")
+    for i, album in enumerate(stale, 1):
+        last = time_ago(album['last_listened_at']) if album['last_listened_at'] else "never played"
+        print(f"{i:>2}. {album['name']} by {CYAN}{album['artist_name']}{RESET} ({last})")
+
 def main():
     """Main CLI menu."""
     if os.path.exists(JSON_FILE):
@@ -234,7 +245,8 @@ def main():
         print("4. Replace Stylus")
         print("5. Bulk Import Listened Albums")
         print("6. Recent Listens")
-        print("7. Exit")
+        print("7. Overdue Listens")
+        print("8. Exit")
         choice = input("Select an option: ")
 
         if choice == "1":
@@ -250,6 +262,8 @@ def main():
         elif choice == "6":
             show_recent_listened(conn)
         elif choice == "7":
+            show_stale_albums(conn)
+        elif choice == "8":
             print("Goodbye!")
             break
         else:

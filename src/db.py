@@ -89,6 +89,27 @@ def list_recent_listens(conn, limit=20):
         LIMIT ?;
     """, (limit,)).fetchall()
 
+def list_stale_albums(conn, limit=10):
+    """Return the least recently listened albums, never-played first, with their last listen date"""
+    return conn.execute("""
+        SELECT
+            al.name,
+            ar.name AS artist_name,
+            max(la.created_at) AS last_listened_at
+        FROM
+            albums al
+        LEFT JOIN
+            listened_albums la
+                USING (album_id)
+        JOIN artists ar
+                USING (artist_id)
+        GROUP BY
+            al.album_id
+        ORDER BY
+            last_listened_at ASC
+        LIMIT ?;
+    """, (limit,)).fetchall()
+
 def current_stylus_id(conn):
     """Return the most recently installed stylus, creating the first one on a fresh database."""
     row = conn.execute("SELECT stylus_id FROM stylus ORDER BY stylus_id DESC LIMIT 1").fetchone()
